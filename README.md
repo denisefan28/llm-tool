@@ -23,6 +23,11 @@ Run llama2 model locally
 python run_model.py
 ```
 
+Install langChain
+```shell
+pip install langchain
+```
+
 
 
 
