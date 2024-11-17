@@ -1,15 +1,28 @@
 from flask import Flask, request, session
 from llama_cpp import Llama
 from datetime import timedelta
-from boyfriend import system_prompt
+from config.secretmanager import SecretManager
+from workflow import AgentWorkflow
+from llama_cpp.llama import Llama, LlamaGrammar
 
+
+grammar = None
+with open('./config/json_grammar.gbnf') as f:
+    grammar_text = f.read()
+    grammar = LlamaGrammar.from_string(grammar_text)
+
+secret_manager = SecretManager()
 
 app = Flask(__name__)
 LLM = Llama(
     model_path="../models/llama3.2/Llama-3.2-1B-Instruct-Q3_K_XL.gguf",
     chat_format="llama-3",
-    return_full_text=True
+    return_full_text=True,
+    n_ctx=4096,
+    grammar = grammar
     )
+
+app.secret_key = secret_manager.get_secret("FLASK_SECRET_KEY")
 app.permanent_session_lifetime = timedelta(minutes=30)  # Sessions expire after 30 minutes
 
 @app.route("/")
@@ -17,17 +30,20 @@ def hello_world():
     return "<p>Hello, World!</p>"
 
 
-@app.route("/prompt", methods=["POST"])
-def prompt_model():
+@app.route("/chat", methods=["POST"])
+def chat_model():
     session.permanent = True
     LLM_output = "unknown"
     if request.method == "POST":
         if 'conversation' not in session:
             session['conversation'] = [
-                {"role": "system", "content": f"{system_prompt}"},
+                {"role": "system", "content": ""},
             ]
+
         json_data = request.json
-        query = json_data.get("prompt", "hello")
+        query = json_data.get("query", None)
+        if query is None:
+            return {"response": "Empty query!"}
         
         session['conversation'].append(
                 {"role": "user", "content": f"task: {query}"})
@@ -51,15 +67,30 @@ def prompt_model():
 
 @app.route("/logout", methods=["POST"])
 def logout():
-    # Method 1: Clear specific key
-    #session.pop('conversation', None)
-    
-    # Method 2: Clear entire session
     session.clear()
     
-    # Method 3: Invalidate session
-    #session.permanent = False
-    
     return {"status": "logged out"}
+
+@app.route("/workflow", methods=["POST"])
+def run_worflow():
+
+    workflow = AgentWorkflow(LLM, grammar)
+    
+    workflow.load_data()
+
+    result = workflow.execute()
+    return result
+    # Initialize agents: headhunter, resumewriter and reviwer
+
+    # Creat a workflow, there are three tasks in the work flow
+    # 1. task job description analysis - job hunder
+    #     1.1 the input is a job description txt file
+    #     1.2 the output is a json format content includes 
+    # 2. resumer generation - resumer writer
+    #     2.1 create the content based on user career story txt file 
+    #     2.2 use job hunder's ouput as input
+    # 3. check and review the resume - resumer reviewer
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
