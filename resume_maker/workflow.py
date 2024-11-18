@@ -37,16 +37,34 @@ class AgentWorkflow:
     def execute(self):
         head_hunter_agent = self.agents.get(AgentType.PLANNER)
         reviewer_agent = self.agents.get(AgentType.REVIEWER)
+        writer_agent = self.agents.get(AgentType.EXECUTOR)
         self.history.append({"role": "system", "content": head_hunter_agent.get_system_prompt() })
-        result = dict()
         self.history.append({"role": "user", "content": head_hunter_agent.get_task_prompt("", self.source["job_description"])})
-        response = self._call_llm(self.history)
-        self.history.append({"role": "assistant", "content": response})
+        job_description_response = self._call_llm(self.history)
+        self.history.append({"role": "assistant", "content": job_description_response})
         self.history.append({"role": "user", "content": reviewer_agent.get_system_prompt()})
-        print(self.history)
-        response = self._call_llm(self.history)
-        return response
-    
+        job_requirements_json = self._call_llm(self.history)
+
+        self._reset_history()
+        self.history.append({"role": "system", "content": writer_agent.get_system_prompt() })
+        career_details = json.loads(self.source["career_story"])
+        updated_career = []
+        for k in career_details.get("basic"):
+            messages = self.history
+            messages.append({"role": "user", "content": writer_agent.get_task_prompt(**k)})
+            concise_experience = self._call_llm(messages)
+            messages.append({"role": "assistance", "content": concise_experience})
+            messages.append({"role": "user", "content": writer_agent.get_experience_create_prompt(job_requirements_json)})
+            optimised_experience = self._call_llm(messages)
+            messages.append({"role": "assistance", "content": optimised_experience})
+            messages.append({"role": "user", "content": reviewer_agent.get_experience_review()})
+            reviewed_experience = self._call_llm(messages)
+
+            print("!!! reviewed experience\n", reviewed_experience) 
+            k["experience"] = reviewed_experience
+            updated_career.append(k)
+        return updated_career
+
     def _call_llm(self, messages):
         model_output = self.model.create_chat_completion(
             messages=messages,
@@ -55,5 +73,8 @@ class AgentWorkflow:
             #grammar = self.grammar
             )
         return model_output["choices"][0]["message"]["content"]
+    
+    def _reset_history(self):
+        self.history = []
 
     

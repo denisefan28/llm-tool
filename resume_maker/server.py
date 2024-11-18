@@ -75,21 +75,9 @@ def logout():
 def run_worflow():
 
     workflow = AgentWorkflow(LLM, grammar)
-    
     workflow.load_data()
-
     result = workflow.execute()
     return result
-    # Initialize agents: headhunter, resumewriter and reviwer
-
-    # Creat a workflow, there are three tasks in the work flow
-    # 1. task job description analysis - job hunder
-    #     1.1 the input is a job description txt file
-    #     1.2 the output is a json format content includes 
-    # 2. resumer generation - resumer writer
-    #     2.1 create the content based on user career story txt file 
-    #     2.2 use job hunder's ouput as input
-    # 3. check and review the resume - resumer reviewer
 
 
 if __name__ == "__main__":
